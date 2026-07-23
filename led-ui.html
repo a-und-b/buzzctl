@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>timeBuzzer LED-Test</title>
+<style>
+  body { font: 16px system-ui; background: #1e1e1e; color: #eee; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px; }
+  #status { color: #999; }
+  .grid { display: grid; grid-template-columns: repeat(3, 110px); gap: 10px; }
+  button { font: inherit; padding: 18px 0; border: none; border-radius: 10px; background: #333; color: #eee; cursor: pointer; }
+  button.on { background: #e6b800; color: #000; }
+  #off { background: #552222; width: 350px; }
+</style>
+<h2>timeBuzzer LED — CC 70–78 (Kanal 12)</h2>
+<div id="status">verbinde…</div>
+<div class="grid" id="grid"></div>
+<button id="off">alles aus</button>
+<script>
+let out;
+const state = {};
+const send = (cc, val) => out && out.send([0xBB, cc, val]);
+
+const grid = document.getElementById("grid");
+for (let cc = 70; cc <= 78; cc++) {
+  const b = document.createElement("button");
+  b.textContent = "CC " + cc;
+  b.onclick = () => {
+    state[cc] = !state[cc];
+    b.classList.toggle("on", state[cc]);
+    send(cc, state[cc] ? 127 : 0);
+  };
+  grid.appendChild(b);
+  state[cc] = false;
+}
+document.getElementById("off").onclick = () => {
+  for (let cc = 0; cc < 128; cc++) send(cc, 0);
+  document.querySelectorAll(".grid button").forEach(b => b.classList.remove("on"));
+  for (const k in state) state[k] = false;
+};
+
+navigator.requestMIDIAccess().then(midi => {
+  out = [...midi.outputs.values()].find(o => /timebuzzer/i.test(o.name));
+  document.getElementById("status").textContent = out ? "verbunden: " + out.name : "timeBuzzer nicht gefunden";
+}).catch(e => document.getElementById("status").textContent = "Web MIDI nicht verfügbar: " + e);
+</script>
