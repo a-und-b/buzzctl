@@ -10,7 +10,6 @@ Candidates for later, roughly sorted by usefulness:
 - **Wheel tuning:** configurable step size/acceleration, trigger action every N steps
 
 ## Actions
-- **Native media keys** (volume, play/pause via `NX_KEYTYPE_*` instead of the osascript detour)
 - **Layout-aware key codes:** currently US-physical (z/y swapped on QWERTZ) → map via `UCKeyTranslate`
 - **Action sequences** (multiple actions per event) and inline variables (e.g. pass the wheel position to the shell)
 

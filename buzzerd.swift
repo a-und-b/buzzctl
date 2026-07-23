@@ -45,6 +45,23 @@ let keyCodes: [String: CGKeyCode] = [
     "left": 123, "right": 124, "down": 125, "up": 126,
 ]
 
+// Named media keys — sent as system-defined events (NX_KEYTYPE_*), which
+// trigger the native macOS volume/playback HUD, unlike osascript.
+let mediaKeys: [String: Int32] = [
+    "volumeup": 0, "volumedown": 1, "mute": 7,
+    "playpause": 16, "next": 17, "previous": 18,
+]
+
+func sendMediaKey(_ key: Int32) {
+    for down in [true, false] {
+        let data1 = Int((key << 16) | Int32((down ? 0xa : 0xb) << 8))
+        NSEvent.otherEvent(with: .systemDefined, location: .zero,
+            modifierFlags: NSEvent.ModifierFlags(rawValue: down ? 0xa00 : 0xb00),
+            timestamp: 0, windowNumber: 0, context: nil, subtype: 8,
+            data1: data1, data2: -1)?.cgEvent?.post(tap: .cghidEventTap)
+    }
+}
+
 func parseCombo(_ combo: String) -> (CGEventFlags, CGKeyCode)? {
     var flags = CGEventFlags()
     var code: CGKeyCode?
@@ -143,6 +160,7 @@ func run(_ action: Action?, _ label: String) {
         do { try p.run() } catch { log("shell error (\(label)): \(error)") }
     }
     if let key = action.key {
+        if let mk = mediaKeys[key.lowercased()] { sendMediaKey(mk); return }
         guard let (flags, code) = parseCombo(key) else { log("unknown key: \(key)"); return }
         let src = CGEventSource(stateID: .hidSystemState)
         for down in [true, false] {
@@ -219,6 +237,16 @@ MIDIInputPortCreateWithBlock(client, "in" as CFString, &inPort) { packetList, _ 
 
 loadConfigIfChanged()
 connectBuzzer()
+
+// key actions (incl. media keys) are silently dropped by macOS without the
+// Accessibility permission — prompt for it up front instead of failing quietly.
+let usesKeys = config.values.contains { p in
+    [p.press, p.release, p.wheelUp, p.wheelDown, p.touch, p.untouch].contains { $0?.key != nil }
+}
+if usesKeys, !AXIsProcessTrusted() {
+    log("key actions configured but Accessibility permission is missing — grant it in System Settings → Privacy & Security → Accessibility, then restart buzzerd")
+    AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
+}
 
 NSWorkspace.shared.notificationCenter.addObserver(
     forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main

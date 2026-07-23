@@ -22,8 +22,10 @@ swiftc -O buzzerd.swift -o buzzerd
   (resting a hand on the buzzer without pressing).
 - **Actions:** `{"shell": "…"}` (including `shortcuts run "Name"` for the
   macOS Shortcuts app, no special permissions needed) or
-  `{"key": "cmd+shift+m"}` (requires a one-time Accessibility grant for the
-  binary).
+  `{"key": "cmd+shift+m"}`. Named media keys — `volumeup`, `volumedown`,
+  `mute`, `playpause`, `next`, `previous` — are sent as native system events,
+  so the macOS volume/playback HUD shows up. All `key` actions require a
+  one-time Accessibility grant; buzzerd prompts for it at startup if needed.
 - **LED:** `"led": [r,g,b]` (all 3 LEDs) or 9 values for individual control,
   0–127 — shows which profile is active.
 - **Hot-plug:** unplugging/replugging the buzzer is detected.
