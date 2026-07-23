@@ -16,24 +16,87 @@ swiftc -O buzzerd.swift -o buzzerd
 ./buzzerd buzzerd.json
 ```
 
-- **Profiles:** `buzzerd.json` maps bundle IDs (frontmost app) to profiles,
-  with `default` as fallback. Changes are picked up at runtime (mtime poll).
-- **Events:** `press`, `release`, `wheelUp`, `wheelDown`, `touch`, `untouch`
-  (resting a hand on the buzzer without pressing).
-- **Actions:** `{"shell": "…"}` (including `shortcuts run "Name"` for the
-  macOS Shortcuts app, no special permissions needed) or
-  `{"key": "cmd+shift+m"}`. Named media keys — `volumeup`, `volumedown`,
-  `mute`, `playpause`, `next`, `previous` — are sent as native system events,
-  so the macOS volume/playback HUD shows up. All `key` actions require a
-  one-time Accessibility grant; buzzerd prompts for it at startup if needed.
-- **LED:** `"led": [r,g,b]` (all 3 LEDs) or 9 values for individual control,
-  0–127 — shows which profile is active.
 - **Hot-plug:** unplugging/replugging the buzzer is detected.
+- **Hot-reload:** config changes are picked up at runtime (mtime poll, ~2 s).
+- **Verbose mode:** `./buzzerd -v buzzerd.json` logs every raw MIDI event.
 - **Autostart:** edit the two `/PATH/TO` entries in `buzzerd.plist`, then
   `cp buzzerd.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/buzzerd.plist`.
 - **Self-check:** `./buzzerd selftest`
 
 Planned features: see [ROADMAP.md](ROADMAP.md).
+
+### Configuration
+
+`buzzerd.json` is a JSON object mapping **app bundle IDs to profiles**. The
+profile of the frontmost app is active; `default` is the fallback for every
+app not listed:
+
+```json
+{
+  "default": {
+    "led": [0, 40, 127],
+    "press":     { "key": "mute" },
+    "wheelUp":   { "key": "volumeup" },
+    "wheelDown": { "key": "volumedown" }
+  },
+  "com.apple.QuickTimePlayerX": {
+    "led": [0, 127, 127],
+    "press":     { "key": "space" },
+    "wheelUp":   { "key": "right" },
+    "wheelDown": { "key": "left" }
+  },
+  "com.microsoft.teams2": {
+    "led": [127, 0, 0],
+    "press": { "key": "cmd+shift+m" }
+  }
+}
+```
+
+To find an app's bundle ID:
+
+```bash
+osascript -e 'id of app "QuickTime Player"'
+```
+
+#### Events
+
+Every profile entry maps events to actions. All events are optional:
+
+| Event | Fires when |
+|-------|-----------|
+| `press` / `release` | the buzzer is pressed down / let go |
+| `wheelUp` / `wheelDown` | the wheel is turned (once per step) |
+| `touch` / `untouch` | a hand rests on the buzzer / is lifted, without pressing |
+
+#### Actions
+
+An action is an object with exactly one of two keys:
+
+- **`{"shell": "…"}`** — run a shell command (`/bin/sh -c`). Works without
+  any permissions. This covers almost everything: `osascript`, `open`, and
+  `shortcuts run "Name"` to trigger automations built in the macOS
+  Shortcuts app.
+- **`{"key": "…"}`** — synthesize a key press. Requires a one-time
+  Accessibility grant (System Settings → Privacy & Security → Accessibility);
+  buzzerd prompts for it at startup if key actions are configured.
+  Two forms:
+  - **Shortcut combos** like `cmd+shift+m` — modifiers `cmd`, `shift`,
+    `alt`/`opt`, `ctrl`, plus one key: a letter, digit, `space`, `return`,
+    `tab`, `delete`, `esc`, `f1`–`f12`, or arrow keys
+    `left`/`right`/`up`/`down`. Key codes are US-physical; on QWERTZ
+    layouts z/y are swapped (see ROADMAP).
+  - **Named media keys** `volumeup`, `volumedown`, `mute`, `playpause`,
+    `next`, `previous` — sent as native system events, so the macOS
+    volume/playback HUD appears and playback controls reach whatever app
+    is currently playing.
+
+#### LED
+
+`"led"` sets the buzzer's LED color while the profile is active — glanceable
+feedback for which mode you're in. Values are 0–127 per channel:
+
+- `[r, g, b]` — all three LEDs the same color
+- `[r, g, b, r, g, b, r, g, b]` — left, middle, right LED individually
 
 ## Protocol
 
