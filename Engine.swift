@@ -91,6 +91,8 @@ final class BuzzerEngine: ObservableObject {
 
     let configPath: String
     var verbose = false
+    /// Set by the config UI: preview this profile's LED instead of the frontmost app's.
+    var ledPreviewKey: String? = nil
 
     private var client = MIDIClientRef()
     private var outPort = MIDIPortRef()
@@ -165,9 +167,12 @@ final class BuzzerEngine: ObservableObject {
     func applyProfileLED(force: Bool = false) {
         let (key, profile) = activeProfile()
         activeProfileKey = key
-        guard force || key != lastLEDProfile else { return }
-        lastLEDProfile = key
-        guard var rgb = profile?.led else { return }
+        var effKey = key
+        var effProfile = profile
+        if let pk = ledPreviewKey, let pp = config[pk] { effKey = pk; effProfile = pp }
+        guard force || effKey != lastLEDProfile else { return }
+        lastLEDProfile = effKey
+        guard var rgb = effProfile?.led else { return }
         if rgb.count == 3 { rgb = rgb + rgb + rgb }
         guard rgb.count == 9 else { log("led needs 3 or 9 values"); return }
         for (i, v) in rgb.enumerated() { midiSend([0xBB, UInt8(70 + i), min(v, 127)]) }

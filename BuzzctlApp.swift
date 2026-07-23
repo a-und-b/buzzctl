@@ -135,6 +135,16 @@ struct ConfigView: View {
         .onChange(of: draft) { _ in
             if loaded { save() } // apply immediately — no explicit save step
         }
+        // While the editor is open, the LED previews the selected profile,
+        // not the frontmost app's — color changes are visible for any profile.
+        .onChange(of: selected) { key in
+            engine.ledPreviewKey = key
+            engine.applyProfileLED(force: true)
+        }
+        .onDisappear {
+            engine.ledPreviewKey = nil
+            engine.applyProfileLED(force: true)
+        }
     }
 
     var sortedKeys: [String] {
@@ -238,10 +248,7 @@ struct EventRow: View {
                 if kind.wrappedValue == "key" {
                     KeyPicker(combo: value)
                 } else if kind.wrappedValue == "shell" {
-                    TextField("shell command", text: value)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(.callout, design: .monospaced))
-                        .frame(width: 300)
+                    ShellField(command: value)
                 }
                 Picker("", selection: kind) {
                     Text("None").tag("none")
@@ -276,6 +283,26 @@ struct EventRow: View {
                 else if action?.shell != nil { action = Action(shell: v) }
             }
         )
+    }
+}
+
+// Edits are committed on return or when focus leaves the field — not per
+// keystroke, so half-typed commands never hit the config.
+struct ShellField: View {
+    @Binding var command: String
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("open -a Safari · shortcuts run \"Name\" · …", text: $text)
+            .textFieldStyle(.roundedBorder)
+            .font(.system(.callout, design: .monospaced))
+            .frame(width: 300)
+            .focused($focused)
+            .onSubmit { command = text }
+            .onChange(of: focused) { f in if !f { command = text } }
+            .onAppear { text = command }
+            .onChange(of: command) { c in if !focused { text = c } }
     }
 }
 
