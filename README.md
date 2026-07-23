@@ -76,3 +76,10 @@ needed.
 - [vertexitde/OpenBuzzer](https://github.com/vertexitde/OpenBuzzer) —
   Electron app for LED animations (Pomodoro, media keys, plugin system),
   uses the same MIDI protocol.
+
+## Acknowledgements
+
+- [Ideas in Logic GbR](https://timebuzzer.com/) — makers of the timeBuzzer®
+  hardware this project builds on. If you like the device, buy one from them.
+- [vertexitde/OpenBuzzer](https://github.com/vertexitde/OpenBuzzer) — for the
+  hint that CC 81 is a touch sensor, not a heartbeat.
