@@ -149,6 +149,7 @@ struct MenuContent: View {
 struct ConfigView: View {
     @ObservedObject var engine: BuzzerEngine
     @State private var draft: [String: Profile] = [:]
+    @State private var timingDraft = Timing()
     @State private var selected: String?
     @State private var loaded = false
 
@@ -191,6 +192,8 @@ struct ConfigView: View {
                 ProfileEditor(
                     profile: Binding(get: { draft[key] ?? Profile() },
                                      set: { draft[key] = $0 }),
+                    timing: $timingDraft,
+                    engine: engine,
                     title: displayName(key)
                 )
             } else {
@@ -200,12 +203,16 @@ struct ConfigView: View {
         .frame(minWidth: 720, minHeight: 460)
         .onAppear {
             draft = engine.config
+            timingDraft = engine.timing ?? Timing()
             if draft["default"] == nil { draft["default"] = Profile() }
             selected = "default"
             loaded = true
         }
         .onChange(of: draft) { _ in
             if loaded { save() } // apply immediately — no explicit save step
+        }
+        .onChange(of: timingDraft) { _ in
+            if loaded { save() }
         }
         // While the editor is open, the LED previews the selected profile,
         // not the frontmost app's — color changes are visible for any profile.
@@ -215,6 +222,7 @@ struct ConfigView: View {
         }
         .onDisappear {
             engine.ledPreviewKey = nil
+            engine.testMode = false
             engine.applyProfileLED(force: true)
         }
     }
@@ -256,7 +264,8 @@ struct ConfigView: View {
         do {
             let enc = JSONEncoder()
             enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try enc.encode(draft).write(to: URL(fileURLWithPath: engine.configPath))
+            try enc.encode(ConfigFile(timing: timingDraft, profiles: draft))
+                .write(to: URL(fileURLWithPath: engine.configPath))
             engine.reloadConfig()
         } catch { NSSound.beep() }
     }
@@ -264,6 +273,8 @@ struct ConfigView: View {
 
 struct ProfileEditor: View {
     @Binding var profile: Profile
+    @Binding var timing: Timing
+    @ObservedObject var engine: BuzzerEngine
     let title: String
 
     var body: some View {
@@ -278,7 +289,7 @@ struct ProfileEditor: View {
                     }
                 }
             }
-            Section("Events") {
+            Section {
                 HStack(spacing: 8) {
                     Text("Event").frame(width: 100, alignment: .leading)
                     Text("Mode").frame(width: 150, alignment: .trailing)
@@ -287,12 +298,46 @@ struct ProfileEditor: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                EventRow(label: "Press", hint: "Button pressed down", action: $profile.press)
-                EventRow(label: "Release", hint: "Button let go", action: $profile.release)
-                EventRow(label: "Wheel Up", hint: "Wheel turned clockwise", action: $profile.wheelUp)
-                EventRow(label: "Wheel Down", hint: "Wheel turned counter-clockwise", action: $profile.wheelDown)
-                EventRow(label: "Touch", hint: "Hand rests on the buzzer", action: $profile.touch)
-                EventRow(label: "Untouch", hint: "Hand lifted off", action: $profile.untouch)
+                EventRow(label: "Press", eventKey: "press", hint: "Button pressed down",
+                         action: $profile.press, fired: engine.lastFired)
+                EventRow(label: "Double Press", eventKey: "doublePress",
+                         hint: "Two quick presses — delays a single press by the double-tap window",
+                         action: $profile.doublePress, fired: engine.lastFired,
+                         timing: ($timing.doublePressWindow, Timing.defaults.doublePress))
+                EventRow(label: "Long Press", eventKey: "longPress", hint: "Button held down",
+                         action: $profile.longPress, fired: engine.lastFired,
+                         timing: ($timing.longPressHold, Timing.defaults.longPress))
+                EventRow(label: "Release", eventKey: "release", hint: "Button let go (always fires)",
+                         action: $profile.release, fired: engine.lastFired)
+                EventRow(label: "Wheel Up", eventKey: "wheelUp", hint: "Wheel turned clockwise",
+                         action: $profile.wheelUp, fired: engine.lastFired)
+                EventRow(label: "Wheel Down", eventKey: "wheelDown", hint: "Wheel turned counter-clockwise",
+                         action: $profile.wheelDown, fired: engine.lastFired)
+                EventRow(label: "Touch", eventKey: "touch",
+                         hint: "Hand near or on the buzzer (proximity — triggers shortly before contact)",
+                         action: $profile.touch, fired: engine.lastFired)
+                EventRow(label: "Long Touch", eventKey: "longTouch",
+                         hint: "Hand hovering or resting on the buzzer",
+                         action: $profile.longTouch, fired: engine.lastFired,
+                         timing: ($timing.longTouchHold, Timing.defaults.longTouch))
+                EventRow(label: "Untouch", eventKey: "untouch",
+                         hint: "Hand moved away (always fires)",
+                         action: $profile.untouch, fired: engine.lastFired)
+            } header: {
+                HStack {
+                    Text("Events")
+                    Spacer()
+                    Toggle("Test mode", isOn: $engine.testMode)
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .help("Events light up here instead of running their actions")
+                }
+            } footer: {
+                if engine.testMode {
+                    Text("Test mode: buzzer inputs flash the matching row — actions are not executed. All gestures are detected, even unconfigured ones, using this profile.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)
@@ -319,13 +364,22 @@ struct ProfileEditor: View {
 
 struct EventRow: View {
     let label: String
+    let eventKey: String
     let hint: String
     @Binding var action: Action?
+    var fired: FiredEvent? = nil
+    var timing: (value: Binding<Double?>, def: Double)? = nil
+    @State private var flashing = false
 
     var body: some View {
-        // fixed columns: event | type | input (trailing)
+        // fixed columns: event (with test-mode flash dot) | type | timing | input (trailing)
         HStack(spacing: 8) {
-            Text(label).frame(width: 100, alignment: .leading)
+            HStack(spacing: 6) {
+                Circle().fill(.green).frame(width: 8, height: 8)
+                    .opacity(flashing ? 1 : 0)
+                Text(label)
+            }
+            .frame(width: 110, alignment: .leading)
             Picker("", selection: kind) {
                 Text("None").tag("none")
                 Text("Keystroke").tag("key")
@@ -333,7 +387,10 @@ struct EventRow: View {
             }
             .labelsHidden()
             .fixedSize()
-            .frame(width: 150, alignment: .trailing)
+            .frame(width: 140, alignment: .trailing)
+            if let timing, kind.wrappedValue != "none" {
+                TimingStepper(value: timing.value, defaultValue: timing.def)
+            }
             Spacer()
             if kind.wrappedValue == "key" {
                 KeyPicker(combo: value)
@@ -342,6 +399,13 @@ struct EventRow: View {
             }
         }
         .help(hint)
+        .onChange(of: fired) { f in
+            guard let f, f.label == eventKey else { return }
+            withAnimation(.easeIn(duration: 0.05)) { flashing = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                withAnimation(.easeOut(duration: 0.4)) { flashing = false }
+            }
+        }
     }
 
     var kind: Binding<String> {
@@ -365,6 +429,23 @@ struct EventRow: View {
                 else if action?.shell != nil { action = Action(shell: v) }
             }
         )
+    }
+}
+
+// Seconds stepper for gesture timings; applies to all profiles.
+struct TimingStepper: View {
+    @Binding var value: Double?
+    let defaultValue: Double
+
+    var body: some View {
+        Stepper(value: Binding(get: { value ?? defaultValue }, set: { value = $0 }),
+                in: 0.15...1.5, step: 0.05) {
+            Text(String(format: "%.2f s", value ?? defaultValue))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+        .fixedSize()
+        .help("Gesture timing — applies to all profiles")
     }
 }
 

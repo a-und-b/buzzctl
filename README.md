@@ -48,27 +48,29 @@ Planned features: see [ROADMAP.md](ROADMAP.md).
 
 ### Configuration
 
-`buzzerd.json` is a JSON object mapping **app bundle IDs to profiles**. The
-profile of the frontmost app is active; `default` is the fallback for every
-app not listed:
+`buzzerd.json` maps **app bundle IDs to profiles** (plus optional global
+`timing`). The profile of the frontmost app is active; `default` is the
+fallback for every app not listed:
 
 ```json
 {
-  "default": {
-    "led": [0, 40, 127],
-    "press":     { "key": "mute" },
-    "wheelUp":   { "key": "volumeup" },
-    "wheelDown": { "key": "volumedown" }
-  },
-  "com.apple.QuickTimePlayerX": {
-    "led": [0, 127, 127],
-    "press":     { "key": "space" },
-    "wheelUp":   { "key": "right" },
-    "wheelDown": { "key": "left" }
-  },
-  "com.microsoft.teams2": {
-    "led": [127, 0, 0],
-    "press": { "key": "cmd+shift+m" }
+  "profiles": {
+    "default": {
+      "led": [0, 40, 127],
+      "press":     { "key": "mute" },
+      "wheelUp":   { "key": "volumeup" },
+      "wheelDown": { "key": "volumedown" }
+    },
+    "com.apple.QuickTimePlayerX": {
+      "led": [0, 127, 127],
+      "press":     { "key": "space" },
+      "wheelUp":   { "key": "right" },
+      "wheelDown": { "key": "left" }
+    },
+    "com.microsoft.teams2": {
+      "led": [127, 0, 0],
+      "press": { "key": "cmd+shift+m" }
+    }
   }
 }
 ```
@@ -86,8 +88,27 @@ Every profile entry maps events to actions. All events are optional:
 | Event | Fires when |
 |-------|-----------|
 | `press` / `release` | the buzzer is pressed down / let go |
+| `doublePress` / `longPress` | two quick presses / held for ≥0.5 s |
 | `wheelUp` / `wheelDown` | the wheel is turned (once per step) |
-| `touch` / `untouch` | a hand rests on the buzzer / is lifted, without pressing |
+| `touch` / `untouch` | a hand approaches/hovers over the buzzer / moves away (proximity — no contact needed) |
+| `longTouch` | hand hovering or resting for ≥0.5 s |
+
+Gesture timing: with no double/long variant configured, `press` and `touch`
+fire immediately (raw behavior). Configuring `longPress` moves the single
+press to the release; configuring `doublePress` additionally delays it by
+the double-tap window — the price of disambiguation. `release` and
+`untouch` always fire on the physical transition.
+
+Timings are global (they describe the user, not the app) and adjustable in
+the settings next to each gesture row, or via an optional top-level `timing`
+block. With one present, the file format is
+`{ "timing": { "doublePressWindow": 0.3, "longPressHold": 0.5,
+"longTouchHold": 0.5 }, "profiles": { … } }` —
+bare profile dictionaries (the old format) still load fine.
+
+The settings window also has a **test mode** (toggle above the events
+table): buzzer inputs flash the matching event row instead of running
+their actions — handy for tuning gestures without side effects.
 
 #### Actions
 
@@ -134,7 +155,7 @@ Everything is Control Change on MIDI channel 12 (status byte `0xBB`):
 | 73–75 | → device | Middle LED: R, G, B |
 | 76–78 | → device | Right LED: R, G, B |
 | 80 | ← device | Wheel, absolute position 0–127 (wraps) |
-| 81 | ← device | Touch sensor, active-low: < 64 = touched; state is repeated every ~1.5 s (looks like a heartbeat) |
+| 81 | ← device | Proximity sensor, active-low: < 64 = hand near/on the buzzer (triggers shortly before contact, binary threshold — only 0/127 observed); state is repeated every ~1.5 s (looks like a heartbeat) |
 | 82 | ← device | Button: 127 = pressed, 0 = released |
 
 The device does not respond to the standard SysEx identity request

@@ -16,11 +16,36 @@ struct Action: Codable, Equatable {
 struct Profile: Codable, Equatable {
     var led: [UInt8]? = nil
     var press: Action? = nil
+    var doublePress: Action? = nil
+    var longPress: Action? = nil
     var release: Action? = nil
     var wheelUp: Action? = nil
     var wheelDown: Action? = nil
     var touch: Action? = nil
+    var longTouch: Action? = nil
     var untouch: Action? = nil
+}
+
+// Global gesture timings (seconds); nil = built-in default. Stored once per
+// config file, not per profile — they describe the user, not the app.
+struct Timing: Codable, Equatable {
+    var doublePressWindow: Double? = nil
+    var longPressHold: Double? = nil
+    var longTouchHold: Double? = nil
+
+    static let defaults = (doublePress: 0.3, longPress: 0.5, longTouch: 0.5)
+}
+
+// Config file format: { "timing": {...}, "profiles": { "default": {...} } }.
+// Legacy files are a bare profile dictionary — the loader migrates on read.
+struct ConfigFile: Codable {
+    var timing: Timing? = nil
+    var profiles: [String: Profile]
+}
+
+struct FiredEvent: Equatable {
+    let label: String
+    let seq: Int
 }
 
 // The wheel reports an absolute position 0–127; fix the sign when it wraps (endless encoder).
@@ -77,6 +102,66 @@ func sendMediaKey(_ key: Int32) {
     }
 }
 
+// Derives single / double / long gestures from a binary input (button or touch).
+// With no double/long action configured it degrades to raw behavior: the
+// single action fires immediately on down. When gestures are configured, the
+// single action shifts to the release (long) or is delayed by the double-tap
+// window — the unavoidable price of disambiguation.
+final class GestureRecognizer {
+    var hasDouble: () -> Bool = { false }
+    var hasLong: () -> Bool = { false }
+    var onSingle: () -> Void = {}
+    var onDouble: () -> Void = {}
+    var onLong: () -> Void = {}
+
+    var doubleInterval: TimeInterval
+    var longInterval: TimeInterval
+
+    private var longTimer: Timer?
+    private var singleTimer: Timer?
+    private var awaitingSecond = false
+    private var consumed = false
+
+    init(doubleInterval: TimeInterval = 0.3, longInterval: TimeInterval = 0.5) {
+        self.doubleInterval = doubleInterval
+        self.longInterval = longInterval
+    }
+
+    func down() {
+        if awaitingSecond {
+            singleTimer?.invalidate(); singleTimer = nil
+            awaitingSecond = false
+            consumed = true
+            onDouble()
+            return
+        }
+        consumed = false
+        if hasLong() {
+            longTimer = Timer.scheduledTimer(withTimeInterval: longInterval, repeats: false) { [weak self] _ in
+                self?.consumed = true
+                self?.onLong()
+            }
+        } else if !hasDouble() {
+            consumed = true
+            onSingle() // raw behavior: fire on down
+        }
+    }
+
+    func up() {
+        longTimer?.invalidate(); longTimer = nil
+        if consumed { return }
+        if hasDouble() {
+            awaitingSecond = true
+            singleTimer = Timer.scheduledTimer(withTimeInterval: doubleInterval, repeats: false) { [weak self] _ in
+                self?.awaitingSecond = false
+                self?.onSingle()
+            }
+        } else {
+            onSingle() // long configured, released early → single on release
+        }
+    }
+}
+
 private func endpointName(_ e: MIDIEndpointRef) -> String {
     var s: Unmanaged<CFString>?
     MIDIObjectGetStringProperty(e, kMIDIPropertyName, &s)
@@ -89,6 +174,11 @@ final class BuzzerEngine: ObservableObject {
     @Published private(set) var config: [String: Profile] = [:]
     @Published var paused = false
     @Published private(set) var accessibilityOK = true
+    @Published private(set) var timing: Timing? = nil
+    /// Test mode: events are surfaced via `lastFired` instead of executing actions.
+    @Published var testMode = false
+    @Published private(set) var lastFired: FiredEvent? = nil
+    private var fireSeq = 0
 
     let configPath: String
     var verbose = false
@@ -104,8 +194,37 @@ final class BuzzerEngine: ObservableObject {
     private var lastWheel: Int?
     private var lastTouched: Bool?
     private var lastLEDProfile = ""
+    private lazy var buttonGesture = makeRecognizer(
+        single: (\Profile.press, "press"), double: (\Profile.doublePress, "doublePress"),
+        long: (\Profile.longPress, "longPress"))
+    private lazy var touchGesture = makeRecognizer(
+        single: (\Profile.touch, "touch"), double: nil,
+        long: (\Profile.longTouch, "longTouch"))
 
     init(configPath: String) { self.configPath = configPath }
+
+    private func makeRecognizer(single: (KeyPath<Profile, Action?>, String),
+                                double: (KeyPath<Profile, Action?>, String)?,
+                                long: (KeyPath<Profile, Action?>, String)) -> GestureRecognizer {
+        let g = GestureRecognizer()
+        // In test mode every gesture is detected, configured or not — otherwise
+        // double/long detection only runs when an action is actually assigned,
+        // so unconfigured single presses stay delay-free.
+        if let double {
+            g.hasDouble = { [weak self] in
+                guard let self else { return false }
+                return self.testMode || self.activeProfile().profile?[keyPath: double.0] != nil
+            }
+            g.onDouble = { [weak self] in self.map { $0.run($0.activeProfile().profile?[keyPath: double.0], double.1) } }
+        }
+        g.hasLong = { [weak self] in
+            guard let self else { return false }
+            return self.testMode || self.activeProfile().profile?[keyPath: long.0] != nil
+        }
+        g.onSingle = { [weak self] in self.map { $0.run($0.activeProfile().profile?[keyPath: single.0], single.1) } }
+        g.onLong = { [weak self] in self.map { $0.run($0.activeProfile().profile?[keyPath: long.0], long.1) } }
+        return g
+    }
 
     func log(_ s: String) { print("\(ISO8601DateFormatter().string(from: Date()))  \(s)"); fflush(stdout) }
 
@@ -147,14 +266,30 @@ final class BuzzerEngine: ObservableObject {
               let m = attrs[.modificationDate] as? Date, m != configMtime else { return }
         configMtime = m
         do {
-            config = try JSONDecoder().decode([String: Profile].self,
-                                              from: Data(contentsOf: URL(fileURLWithPath: configPath)))
+            let data = try Data(contentsOf: URL(fileURLWithPath: configPath))
+            if let file = try? JSONDecoder().decode(ConfigFile.self, from: data) {
+                config = file.profiles
+                timing = file.timing
+            } else { // legacy format: bare profile dictionary
+                config = try JSONDecoder().decode([String: Profile].self, from: data)
+                timing = nil
+            }
+            applyTiming()
             log("config loaded (\(config.count) profiles): \(config.keys.sorted().joined(separator: ", "))")
             applyProfileLED(force: true)
         } catch { log("config error in \(configPath): \(error)") }
     }
 
+    private func applyTiming() {
+        buttonGesture.doubleInterval = timing?.doublePressWindow ?? Timing.defaults.doublePress
+        buttonGesture.longInterval = timing?.longPressHold ?? Timing.defaults.longPress
+        touchGesture.longInterval = timing?.longTouchHold ?? Timing.defaults.longTouch
+    }
+
     func activeProfile() -> (key: String, profile: Profile?) {
+        // In test mode, the profile selected in the settings sidebar is the one
+        // under test — the frontmost app would always be Buzzctl itself.
+        if testMode, let pk = ledPreviewKey, let pp = config[pk] { return (pk, pp) }
         let bid = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "default"
         if let p = config[bid] { return (bid, p) }
         return ("default", config["default"])
@@ -183,6 +318,12 @@ final class BuzzerEngine: ObservableObject {
     }
 
     private func run(_ action: Action?, _ label: String) {
+        if testMode { // surface the event, suppress the action
+            fireSeq += 1
+            lastFired = FiredEvent(label: label, seq: fireSeq)
+            log("test: \(label)")
+            return
+        }
         guard !paused else { return }
         guard let action else { if verbose { log("\(label): no action configured") }; return }
         log("\(label) → \(action.shell ?? "key: \(action.key ?? "?")")")
@@ -220,9 +361,11 @@ final class BuzzerEngine: ObservableObject {
             let touched = val < 64
             defer { lastTouched = touched }
             guard let last = lastTouched, touched != last else { return }
-            run(touched ? profile?.touch : profile?.untouch, touched ? "touch" : "untouch")
+            if touched { touchGesture.down() }
+            else { touchGesture.up(); run(profile?.untouch, "untouch") } // untouch stays raw
         case 82:
-            run(val == 127 ? profile?.press : profile?.release, val == 127 ? "press" : "release")
+            if val == 127 { buttonGesture.down() }
+            else { buttonGesture.up(); run(profile?.release, "release") } // release stays raw
         default: break
         }
     }

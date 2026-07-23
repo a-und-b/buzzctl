@@ -5,8 +5,8 @@ frontmost app, actions as shell commands or keyboard shortcuts.
 Candidates for later, roughly sorted by usefulness:
 
 ## Input
-- **Gestures:** double-click, long-press (timer between press/release), press+turn as separate events
-- **Wheel as mode selector:** turning selects an action/profile (LED color as feedback), pressing executes
+- **Press+turn / touch+turn** as separate events (double/long press and touch are implemented)
+- **Wheel as mode selector:** long-touch enters selection, turning cycles modes (LED color as feedback), pressing or a timeout confirms
 - **Wheel tuning:** configurable step size/acceleration, trigger action every N steps
 
 ## Actions
