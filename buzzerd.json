@@ -5,8 +5,24 @@
     "wheelUp": { "shell": "osascript -e 'set volume output volume ((output volume of (get volume settings)) + 4)'" },
     "wheelDown": { "shell": "osascript -e 'set volume output volume ((output volume of (get volume settings)) - 4)'" }
   },
-  "com.spotify.client": {
-    "led": [0, 127, 0],
-    "press": { "shell": "osascript -e 'tell application \"Spotify\" to playpause'" }
+  "com.microsoft.teams2": {
+    "led": [127, 0, 0],
+    "press": { "key": "cmd+shift+m" }
+  },
+  "com.tinyspeck.slackmacgap": {
+    "led": [127, 80, 0],
+    "press": { "key": "cmd+shift+space" }
+  },
+  "org.videolan.vlc": {
+    "led": [127, 40, 0],
+    "press": { "key": "space" },
+    "wheelUp": { "key": "cmd+up" },
+    "wheelDown": { "key": "cmd+down" }
+  },
+  "com.adobe.PremierePro.26": {
+    "led": [80, 0, 127],
+    "press": { "key": "space" },
+    "wheelUp": { "key": "right" },
+    "wheelDown": { "key": "left" }
   }
 }

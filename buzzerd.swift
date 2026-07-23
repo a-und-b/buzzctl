@@ -1,7 +1,7 @@
 // buzzerd — daemon for the timeBuzzer: maps wheel/button to keyboard shortcuts
 // and shell commands, with app profiles (frontmost app → profile) and LED feedback.
 //
-// usage: buzzerd [path/to/buzzerd.json]   (default: ./buzzerd.json)
+// usage: buzzerd [-v] [path/to/buzzerd.json]   (default: ./buzzerd.json; -v logs raw MIDI events)
 //        buzzerd selftest
 //
 // Build: swiftc -O buzzerd.swift -o buzzerd
@@ -75,7 +75,8 @@ if CommandLine.arguments.contains("selftest") {
 
 // MARK: - Config
 
-let configPath = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "buzzerd.json"
+let verbose = CommandLine.arguments.contains("-v")
+let configPath = CommandLine.arguments.dropFirst().first { $0 != "-v" } ?? "buzzerd.json"
 var config: [String: Profile] = [:]
 var configMtime = Date.distantPast
 
@@ -133,7 +134,8 @@ func applyProfileLED(force: Bool = false) {
 // MARK: - Aktionen
 
 func run(_ action: Action?, _ label: String) {
-    guard let action else { return }
+    guard let action else { if verbose { log("\(label): no action configured") }; return }
+    log("\(label) → \(action.shell ?? "key: \(action.key ?? "?")")")
     if let shell = action.shell {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
@@ -157,6 +159,7 @@ var lastWheel: Int?
 var lastTouched: Bool?
 
 func handle(cc: UInt8, val: UInt8) {
+    if verbose { log("event: CC \(cc) = \(val)  (profile: \(activeProfile().key))") }
     let profile = activeProfile().profile
     switch cc {
     case 80:
