@@ -9,6 +9,8 @@ import ServiceManagement
 import UniformTypeIdentifiers
 
 @main struct BuzzctlApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
+
     static let engine: BuzzerEngine = {
         let e = BuzzerEngine(configPath: defaultConfigPath())
         e.start()
@@ -47,6 +49,70 @@ import UniformTypeIdentifiers
             try? seed.write(to: file, atomically: true, encoding: .utf8)
         }
         return file.path
+    }
+}
+
+// Shows the onboarding window once on first launch.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var onboardingWindow: NSWindow?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: "onboarded") else { return }
+        defaults.set(true, forKey: "onboarded")
+        let window = NSWindow(contentViewController: NSHostingController(
+            rootView: OnboardingView { [weak self] in self?.onboardingWindow?.close() }
+        ))
+        window.title = "Welcome to Buzzctl"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        onboardingWindow = window
+    }
+}
+
+struct OnboardingView: View {
+    let close: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "dial.medium.fill")
+                .font(.system(size: 44))
+                .foregroundStyle(.tint)
+            Text("Welcome to Buzzctl").font(.title2.bold())
+            VStack(alignment: .leading, spacing: 14) {
+                row("menubar.rectangle",
+                    "Buzzctl lives in your menu bar",
+                    "Check the connection status, pause mappings, or quit from there.")
+                row("dial.medium",
+                    "Turn, press, or touch your buzzer",
+                    "Every input can trigger a keystroke, media key, or shell command — per app. Set it up under Settings…")
+                row("lock.shield",
+                    "One permission for keystrokes",
+                    "Sending keystrokes needs macOS Accessibility access — you'll be asked once, and the menu will remind you if it's missing.")
+            }
+            .frame(maxWidth: 400)
+            Button("Get Started") { close() }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+        }
+        .padding(28)
+        .frame(width: 470)
+    }
+
+    func row(_ icon: String, _ title: String, _ detail: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3)
+                .frame(width: 26)
+                .foregroundStyle(.tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).bold()
+                Text(detail).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 
@@ -213,6 +279,14 @@ struct ProfileEditor: View {
                 }
             }
             Section("Events") {
+                HStack(spacing: 8) {
+                    Text("Event").frame(width: 100, alignment: .leading)
+                    Text("Mode").frame(width: 150, alignment: .trailing)
+                    Spacer()
+                    Text("Action")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 EventRow(label: "Press", hint: "Button pressed down", action: $profile.press)
                 EventRow(label: "Release", hint: "Button let go", action: $profile.release)
                 EventRow(label: "Wheel Up", hint: "Wheel turned clockwise", action: $profile.wheelUp)
@@ -258,7 +332,8 @@ struct EventRow: View {
                 Text("Shell Command").tag("shell")
             }
             .labelsHidden()
-            .frame(width: 150)
+            .fixedSize()
+            .frame(width: 150, alignment: .trailing)
             Spacer()
             if kind.wrappedValue == "key" {
                 KeyPicker(combo: value)
