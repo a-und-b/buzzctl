@@ -8,12 +8,12 @@ import AppKit
 import Combine
 import CoreMIDI
 
-struct Action: Codable {
+struct Action: Codable, Equatable {
     var key: String? = nil
     var shell: String? = nil
 }
 
-struct Profile: Codable {
+struct Profile: Codable, Equatable {
     var led: [UInt8]? = nil
     var press: Action? = nil
     var release: Action? = nil

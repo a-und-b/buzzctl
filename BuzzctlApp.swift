@@ -1,5 +1,6 @@
 // BuzzctlApp — menu bar app wrapping the buzzerd engine: connection status,
 // pause toggle, launch-at-login, and a graphical editor for buzzerd.json.
+// Settings apply immediately (macOS HIG) — no explicit save step.
 //
 // Build: ./build.sh (assembles Buzzctl.app)
 
@@ -77,54 +78,62 @@ struct ConfigView: View {
     @ObservedObject var engine: BuzzerEngine
     @State private var draft: [String: Profile] = [:]
     @State private var selected: String?
-    @State private var dirty = false
+    @State private var loaded = false
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selected) {
-                ForEach(sortedKeys, id: \.self) { key in
-                    Text(key == "default" ? "Default (all apps)" : appName(for: key))
+            VStack(spacing: 0) {
+                List(selection: $selected) {
+                    ForEach(sortedKeys, id: \.self) { key in
+                        Text(displayName(key))
+                    }
                 }
+                Divider()
+                // add/remove at the bottom of the sidebar, System Settings-style
+                HStack(spacing: 4) {
+                    Button(action: addProfile) { Image(systemName: "plus") }
+                        .help("Add a profile for an app")
+                    Button(action: removeProfile) { Image(systemName: "minus") }
+                        .disabled(selected == nil || selected == "default")
+                        .help("Remove the selected profile")
+                    Spacer()
+                    Menu {
+                        Button("Edit as JSON…") {
+                            NSWorkspace.shared.open(URL(fileURLWithPath: engine.configPath))
+                        }
+                        Button("Show in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: engine.configPath)])
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                }
+                .buttonStyle(.borderless)
+                .padding(6)
             }
-            .frame(minWidth: 190)
-            .toolbar {
-                Button(action: addProfile) { Image(systemName: "plus") }
-                    .help("Add a profile for an app")
-                Button(action: removeProfile) { Image(systemName: "minus") }
-                    .disabled(selected == nil || selected == "default")
-                    .help("Remove the selected profile")
-            }
+            .frame(minWidth: 200)
         } detail: {
             if let key = selected, draft[key] != nil {
                 ProfileEditor(
                     profile: Binding(get: { draft[key] ?? Profile() },
-                                     set: { draft[key] = $0; dirty = true }),
-                    title: key == "default" ? "Default (all apps)" : appName(for: key)
+                                     set: { draft[key] = $0 }),
+                    title: displayName(key)
                 )
             } else {
                 Text("Select a profile").foregroundStyle(.secondary)
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            HStack {
-                Text(engine.configPath)
-                    .font(.caption).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.middle)
-                Spacer()
-                Button("Edit JSON") { NSWorkspace.shared.open(URL(fileURLWithPath: engine.configPath)) }
-                Button("Save") { save() }
-                    .keyboardShortcut("s")
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!dirty)
-            }
-            .padding(10)
-            .background(.bar)
-        }
-        .frame(minWidth: 680, minHeight: 440)
+        .frame(minWidth: 720, minHeight: 460)
         .onAppear {
             draft = engine.config
             if draft["default"] == nil { draft["default"] = Profile() }
             selected = "default"
+            loaded = true
+        }
+        .onChange(of: draft) { _ in
+            if loaded { save() } // apply immediately — no explicit save step
         }
     }
 
@@ -132,15 +141,16 @@ struct ConfigView: View {
         draft.keys.sorted { a, b in
             if a == "default" { return true }
             if b == "default" { return false }
-            return appName(for: a).localizedCaseInsensitiveCompare(appName(for: b)) == .orderedAscending
+            return displayName(a).localizedCaseInsensitiveCompare(displayName(b)) == .orderedAscending
         }
     }
 
-    func appName(for bid: String) -> String {
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bid) {
+    func displayName(_ key: String) -> String {
+        if key == "default" { return "Default (all apps)" }
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: key) {
             return FileManager.default.displayName(atPath: url.path)
         }
-        return bid
+        return key
     }
 
     func addProfile() {
@@ -150,10 +160,7 @@ struct ConfigView: View {
         panel.message = "Choose the app this profile applies to"
         guard panel.runModal() == .OK, let url = panel.url,
               let bid = Bundle(url: url)?.bundleIdentifier else { return }
-        if draft[bid] == nil {
-            draft[bid] = Profile(led: [127, 127, 127])
-            dirty = true
-        }
+        if draft[bid] == nil { draft[bid] = Profile(led: [127, 127, 127]) }
         selected = bid
     }
 
@@ -161,7 +168,6 @@ struct ConfigView: View {
         guard let key = selected, key != "default" else { return }
         draft[key] = nil
         selected = "default"
-        dirty = true
     }
 
     func save() {
@@ -170,7 +176,6 @@ struct ConfigView: View {
             enc.outputFormatting = [.prettyPrinted, .sortedKeys]
             try enc.encode(draft).write(to: URL(fileURLWithPath: engine.configPath))
             engine.reloadConfig()
-            dirty = false
         } catch { NSSound.beep() }
     }
 }
@@ -184,20 +189,20 @@ struct ProfileEditor: View {
             Section {
                 LabeledContent("LED color") {
                     HStack {
-                        ColorPicker("", selection: ledBinding, supportsOpacity: false).labelsHidden()
                         if (profile.led?.count ?? 0) == 9 {
                             Text("per-LED colors — edit via JSON").font(.caption).foregroundStyle(.secondary)
                         }
+                        ColorPicker("", selection: ledBinding, supportsOpacity: false).labelsHidden()
                     }
                 }
             }
             Section("Events") {
-                ActionRow(label: "Press", hint: "button pressed down", action: $profile.press)
-                ActionRow(label: "Release", hint: "button let go", action: $profile.release)
-                ActionRow(label: "Wheel up", hint: "wheel turned clockwise", action: $profile.wheelUp)
-                ActionRow(label: "Wheel down", hint: "wheel turned counter-clockwise", action: $profile.wheelDown)
-                ActionRow(label: "Touch", hint: "hand rests on the buzzer", action: $profile.touch)
-                ActionRow(label: "Untouch", hint: "hand lifted off", action: $profile.untouch)
+                EventRow(label: "Press", hint: "Button pressed down", action: $profile.press)
+                EventRow(label: "Release", hint: "Button let go", action: $profile.release)
+                EventRow(label: "Wheel Up", hint: "Wheel turned clockwise", action: $profile.wheelUp)
+                EventRow(label: "Wheel Down", hint: "Wheel turned counter-clockwise", action: $profile.wheelDown)
+                EventRow(label: "Touch", hint: "Hand rests on the buzzer", action: $profile.touch)
+                EventRow(label: "Untouch", hint: "Hand lifted off", action: $profile.untouch)
             }
         }
         .formStyle(.grouped)
@@ -222,39 +227,41 @@ struct ProfileEditor: View {
     }
 }
 
-struct ActionRow: View {
+struct EventRow: View {
     let label: String
     let hint: String
     @Binding var action: Action?
 
     var body: some View {
-        HStack {
-            Picker(label, selection: kind) {
-                Text("None").tag("none")
-                Text("Key").tag("key")
-                Text("Shell").tag("shell")
-            }
-            .frame(width: 230)
-            .help(hint)
-            if kind.wrappedValue == "key" {
-                TextField("cmd+shift+m · volumeup · space …", text: value)
-                    .textFieldStyle(.roundedBorder)
-            } else if kind.wrappedValue == "shell" {
-                TextField("shell command", text: value)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
+        LabeledContent(label) {
+            HStack(spacing: 8) {
+                if kind.wrappedValue == "key" {
+                    KeyPicker(combo: value)
+                } else if kind.wrappedValue == "shell" {
+                    TextField("shell command", text: value)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.callout, design: .monospaced))
+                        .frame(width: 300)
+                }
+                Picker("", selection: kind) {
+                    Text("None").tag("none")
+                    Text("Keystroke").tag("key")
+                    Text("Shell Command").tag("shell")
+                }
+                .labelsHidden()
+                .fixedSize()
             }
         }
+        .help(hint)
     }
 
     var kind: Binding<String> {
         Binding(
             get: { action?.key != nil ? "key" : (action?.shell != nil ? "shell" : "none") },
             set: { k in
-                let current = action?.key ?? action?.shell ?? ""
                 switch k {
-                case "key":   action = Action(key: current)
-                case "shell": action = Action(shell: current)
+                case "key":   action = Action(key: action?.key ?? "")
+                case "shell": action = Action(shell: action?.shell ?? "")
                 default:      action = nil
                 }
             }
@@ -269,5 +276,81 @@ struct ActionRow: View {
                 else if action?.shell != nil { action = Action(shell: v) }
             }
         )
+    }
+}
+
+// MARK: - Shortcut recorder
+
+let keyNames: [CGKeyCode: String] = Dictionary(keyCodes.map { ($0.value, $0.key) },
+                                               uniquingKeysWith: { a, b in min(a, b) })
+
+let mediaKeyOptions: [(name: String, title: String)] = [
+    ("volumeup", "Volume Up"), ("volumedown", "Volume Down"), ("mute", "Mute"),
+    ("playpause", "Play/Pause"), ("next", "Next Track"), ("previous", "Previous Track"),
+]
+
+let keyGlyphs: [String: String] = [
+    "space": "Space", "return": "↩", "tab": "⇥", "delete": "⌫", "esc": "⎋", "escape": "⎋",
+    "left": "←", "right": "→", "up": "↑", "down": "↓",
+]
+
+func prettyCombo(_ combo: String) -> String {
+    if let media = mediaKeyOptions.first(where: { $0.name == combo.lowercased() }) { return media.title }
+    return combo.lowercased().split(separator: "+").map { part -> String in
+        switch part {
+        case "cmd", "command": return "⌘"
+        case "shift": return "⇧"
+        case "alt", "opt", "option": return "⌥"
+        case "ctrl", "control": return "⌃"
+        default: return keyGlyphs[String(part)] ?? part.uppercased()
+        }
+    }.joined()
+}
+
+// A menu button showing the current shortcut. "Record Shortcut…" captures the
+// next keystroke (esc cancels); media keys are picked from the menu directly.
+struct KeyPicker: View {
+    @Binding var combo: String
+    @State private var recording = false
+    @State private var monitor: Any?
+
+    var body: some View {
+        Menu {
+            Button("Record Shortcut…") { start() }
+            Divider()
+            ForEach(mediaKeyOptions, id: \.name) { option in
+                Button(option.title) { combo = option.name }
+            }
+        } label: {
+            Text(recording ? "Press keys… (⎋ cancels)"
+                           : (combo.isEmpty ? "Record Shortcut…" : prettyCombo(combo)))
+                .frame(minWidth: 130)
+        }
+        .fixedSize()
+        .onDisappear { stop() }
+    }
+
+    func start() {
+        recording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { ev in
+            defer { stop() }
+            let mods = ev.modifierFlags.intersection([.command, .shift, .option, .control])
+            if ev.keyCode == 53, mods.isEmpty { return nil } // esc = cancel
+            if let name = keyNames[ev.keyCode] {
+                var parts: [String] = []
+                if mods.contains(.command) { parts.append("cmd") }
+                if mods.contains(.shift) { parts.append("shift") }
+                if mods.contains(.option) { parts.append("alt") }
+                if mods.contains(.control) { parts.append("ctrl") }
+                parts.append(name)
+                combo = parts.joined(separator: "+")
+            }
+            return nil // swallow the keystroke
+        }
+    }
+
+    func stop() {
+        recording = false
+        if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
     }
 }
