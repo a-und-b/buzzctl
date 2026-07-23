@@ -1,3 +1,6 @@
 buzzerd
+Buzzctl
+Buzzctl.app/
+*.zip
 buzzer-events.log
 .DS_Store

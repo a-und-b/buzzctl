@@ -9,10 +9,31 @@ and LED feedback.
 > registered trademark of its respective owner; the name is used here solely
 > to describe device compatibility.
 
-## buzzerd
+## Buzzctl.app (menu bar app)
+
+Native menu bar app that bundles the daemon with a UI: connection status,
+pause toggle, launch-at-login, and a graphical profile editor (with an app
+picker, action fields, and an LED color picker).
+
+1. Download the latest `Buzzctl-*.zip` from
+   [Releases](https://github.com/a-und-b/buzzctl/releases), unzip, and move
+   `Buzzctl.app` to `/Applications`.
+2. The app is ad-hoc signed (no Apple Developer ID). On first launch macOS
+   will refuse it once — allow it via System Settings → Privacy & Security →
+   "Open Anyway", or clear the quarantine flag:
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Buzzctl.app
+   ```
+
+The app's config lives at `~/Library/Application Support/Buzzctl/buzzerd.json`
+— edit it in the UI or as JSON (hot-reloaded either way). Building from
+source instead: `./build.sh` produces both `Buzzctl.app` and the CLI.
+
+## buzzerd (CLI)
 
 ```bash
-swiftc -O buzzerd.swift -o buzzerd
+./build.sh
 ./buzzerd buzzerd.json
 ```
 

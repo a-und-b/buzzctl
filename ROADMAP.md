@@ -18,8 +18,8 @@ Candidates for later, roughly sorted by usefulness:
 - **Cleanup on exit:** signal handler that turns the LEDs off or restores their previous state
 
 ## Infrastructure
-- **Menu bar UI:** show the active profile, open the config, pause the daemon
 - **Multiple buzzers** at once (distinguished by serial number / `kMIDIPropertyUniqueID`)
-- **Homebrew formula** + signed release binary
+- **Homebrew formula**; Developer-ID-signed and notarized releases; universal (Intel) binary
+- **App icon** for Buzzctl.app
 - **Linux/Windows port:** the protocol is documented (README); ALSA rawmidi or WinMM is all it takes
 - **Config schema validation** with helpful error messages
