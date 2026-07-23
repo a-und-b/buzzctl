@@ -291,18 +291,37 @@ struct EventRow: View {
 struct ShellField: View {
     @Binding var command: String
     @State private var text = ""
+    @State private var showHelp = false
     @FocusState private var focused: Bool
 
     var body: some View {
-        TextField("open -a Safari · shortcuts run \"Name\" · …", text: $text)
-            .textFieldStyle(.roundedBorder)
-            .font(.system(.callout, design: .monospaced))
-            .frame(width: 300)
-            .focused($focused)
-            .onSubmit { command = text }
-            .onChange(of: focused) { f in if !f { command = text } }
-            .onAppear { text = command }
-            .onChange(of: command) { c in if !focused { text = c } }
+        HStack(spacing: 4) {
+            TextField("Command", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.callout, design: .monospaced))
+                .frame(width: 280)
+                .focused($focused)
+                .onSubmit { command = text; focused = false }
+                .onChange(of: focused) { f in if !f { command = text } }
+                .onAppear { text = command }
+                .onChange(of: command) { c in if !focused { text = c } }
+            Button { showHelp.toggle() } label: { Image(systemName: "questionmark.circle") }
+                .buttonStyle(.borderless)
+                .help("Examples")
+                .popover(isPresented: $showHelp, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Runs via /bin/sh — no extra permissions needed.")
+                        Group {
+                            Text("open -a Safari").fontDesign(.monospaced) + Text("  — open or activate an app")
+                            Text("shortcuts run \"Name\"").fontDesign(.monospaced) + Text("  — run a macOS Shortcut")
+                            Text("osascript -e '…'").fontDesign(.monospaced) + Text("  — AppleScript one-liner")
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                    .font(.callout)
+                    .padding(12)
+                }
+        }
     }
 }
 
