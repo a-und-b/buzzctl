@@ -243,20 +243,21 @@ struct EventRow: View {
     @Binding var action: Action?
 
     var body: some View {
-        LabeledContent(label) {
-            HStack(spacing: 8) {
-                if kind.wrappedValue == "key" {
-                    KeyPicker(combo: value)
-                } else if kind.wrappedValue == "shell" {
-                    ShellField(command: value)
-                }
-                Picker("", selection: kind) {
-                    Text("None").tag("none")
-                    Text("Keystroke").tag("key")
-                    Text("Shell Command").tag("shell")
-                }
-                .labelsHidden()
-                .fixedSize()
+        // fixed columns: event | type | input (trailing)
+        HStack(spacing: 8) {
+            Text(label).frame(width: 100, alignment: .leading)
+            Picker("", selection: kind) {
+                Text("None").tag("none")
+                Text("Keystroke").tag("key")
+                Text("Shell Command").tag("shell")
+            }
+            .labelsHidden()
+            .frame(width: 150)
+            Spacer()
+            if kind.wrappedValue == "key" {
+                KeyPicker(combo: value)
+            } else if kind.wrappedValue == "shell" {
+                ShellField(command: value)
             }
         }
         .help(hint)
