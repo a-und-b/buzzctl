@@ -56,6 +56,12 @@ struct MenuContent: View {
 
     var body: some View {
         Text(engine.connected ? "Connected — profile: \(engine.activeProfileKey)" : "timeBuzzer not connected")
+        if !engine.accessibilityOK {
+            Button("⚠️ Grant Accessibility Access…") {
+                NSWorkspace.shared.open(URL(string:
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+            }
+        }
         Divider()
         Toggle("Pause", isOn: $engine.paused)
         Button("Settings…") {

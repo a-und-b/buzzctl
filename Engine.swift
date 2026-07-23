@@ -88,6 +88,7 @@ final class BuzzerEngine: ObservableObject {
     @Published private(set) var activeProfileKey = "default"
     @Published private(set) var config: [String: Profile] = [:]
     @Published var paused = false
+    @Published private(set) var accessibilityOK = true
 
     let configPath: String
     var verbose = false
@@ -128,7 +129,10 @@ final class BuzzerEngine: ObservableObject {
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
         ) { [weak self] _ in self?.applyProfileLED() }
-        Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.loadConfigIfChanged() }
+        Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            self?.loadConfigIfChanged()
+            self?.updateAccessibilityState()
+        }
         promptAccessibilityIfNeeded()
     }
 
@@ -244,14 +248,27 @@ final class BuzzerEngine: ObservableObject {
         }
     }
 
-    // key actions (incl. media keys) are silently dropped by macOS without the
-    // Accessibility permission — prompt for it up front instead of failing quietly.
-    private func promptAccessibilityIfNeeded() {
-        let usesKeys = config.values.contains { p in
+    private var usesKeyActions: Bool {
+        config.values.contains { p in
             [p.press, p.release, p.wheelUp, p.wheelDown, p.touch, p.untouch].contains { $0?.key != nil }
         }
-        if usesKeys, !AXIsProcessTrusted() {
-            log("key actions configured but Accessibility permission is missing — grant it in System Settings → Privacy & Security → Accessibility, then restart")
+    }
+
+    private func updateAccessibilityState() {
+        let ok = !usesKeyActions || AXIsProcessTrusted()
+        if ok != accessibilityOK { accessibilityOK = ok }
+    }
+
+    // key actions (incl. media keys) are silently dropped by macOS without the
+    // Accessibility permission. Show the system prompt only once — afterwards
+    // the UI surfaces the state instead of re-prompting on every launch.
+    private func promptAccessibilityIfNeeded() {
+        updateAccessibilityState()
+        guard !accessibilityOK else { return }
+        log("key actions configured but Accessibility permission is missing — grant it in System Settings → Privacy & Security → Accessibility")
+        let d = UserDefaults.standard
+        if !d.bool(forKey: "axPrompted") {
+            d.set(true, forKey: "axPrompted")
             AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
         }
     }
