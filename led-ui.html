@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>timeBuzzer LED-Test</title>
+<title>timeBuzzer LED test</title>
 <style>
   body { font: 16px system-ui; background: #1e1e1e; color: #eee; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px; }
   #status { color: #999; }
@@ -9,10 +9,10 @@
   button.on { background: #e6b800; color: #000; }
   #off { background: #552222; width: 350px; }
 </style>
-<h2>timeBuzzer LED — CC 70–78 (Kanal 12)</h2>
-<div id="status">verbinde…</div>
+<h2>timeBuzzer LED — CC 70–78 (channel 12)</h2>
+<div id="status">connecting…</div>
 <div class="grid" id="grid"></div>
-<button id="off">alles aus</button>
+<button id="off">all off</button>
 <script>
 let out;
 const state = {};
@@ -38,6 +38,6 @@ document.getElementById("off").onclick = () => {
 
 navigator.requestMIDIAccess().then(midi => {
   out = [...midi.outputs.values()].find(o => /timebuzzer/i.test(o.name));
-  document.getElementById("status").textContent = out ? "verbunden: " + out.name : "timeBuzzer nicht gefunden";
-}).catch(e => document.getElementById("status").textContent = "Web MIDI nicht verfügbar: " + e);
+  document.getElementById("status").textContent = out ? "connected: " + out.name : "timeBuzzer not found";
+}).catch(e => document.getElementById("status").textContent = "Web MIDI not available: " + e);
 </script>

@@ -33,25 +33,26 @@ swiftc -O buzzerd.swift -o buzzerd
 
 Planned features: see [ROADMAP.md](ROADMAP.md).
 
-## Findings (as of 2026-07-23)
+## Protocol
 
-- The device is **not HID** but a **USB MIDI device** (USB `16D0:1170`,
-  audio class with a MIDI streaming interface). macOS binds it to the
-  MIDIServer automatically — it shows up as a MIDI source **and**
-  destination named "timeBuzzer". No driver required.
-- **Protocol (fully decoded):** everything is Control Change on MIDI
-  channel 12 (status byte `0xBB`):
+The device is **not HID** — it is a standard **USB MIDI device**
+(USB `16D0:1170`, audio class with a MIDI streaming interface). macOS binds
+it to the MIDIServer automatically; it shows up as a MIDI source **and**
+destination named "timeBuzzer". No driver required.
 
-  | CC | Direction | Meaning |
-  |----|-----------|---------|
-  | 70–72 | → device | Left LED: R, G, B (0–127) |
-  | 73–75 | → device | Middle LED: R, G, B |
-  | 76–78 | → device | Right LED: R, G, B |
-  | 80 | ← device | Wheel, absolute position 0–127 (wraps) |
-  | 81 | ← device | Touch sensor, active-low: < 64 = touched; state is repeated every ~1.5 s (looks like a heartbeat) |
-  | 82 | ← device | Button: 127 = pressed, 0 = released |
+Everything is Control Change on MIDI channel 12 (status byte `0xBB`):
 
-- No response to the standard SysEx identity request (`F0 7E 7F 06 01 F7`).
+| CC | Direction | Meaning |
+|----|-----------|---------|
+| 70–72 | → device | Left LED: R, G, B (0–127) |
+| 73–75 | → device | Middle LED: R, G, B |
+| 76–78 | → device | Right LED: R, G, B |
+| 80 | ← device | Wheel, absolute position 0–127 (wraps) |
+| 81 | ← device | Touch sensor, active-low: < 64 = touched; state is repeated every ~1.5 s (looks like a heartbeat) |
+| 82 | ← device | Button: 127 = pressed, 0 = released |
+
+The device does not respond to the standard SysEx identity request
+(`F0 7E 7F 06 01 F7`).
 
 ## Tools
 

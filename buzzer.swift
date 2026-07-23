@@ -1,11 +1,11 @@
-// buzzer.swift — timeBuzzer (Ideas in Logic GbR, USB-MIDI) ohne Hersteller-Software
+// buzzer.swift — use the timeBuzzer (Ideas in Logic GbR, USB MIDI) without the vendor software
 //
 // Usage:
-//   swift buzzer.swift listen              # eingehende MIDI-Events dumpen (hex + dekodiert)
-//   swift buzzer.swift send F0 7E 7F 06 01 F7   # rohe MIDI-Bytes (hex) an den Buzzer senden
-//   swift buzzer.swift probe               # LED-Kandidaten gruppenweise senden (Enter = nächste Gruppe)
+//   swift buzzer.swift listen              # dump incoming MIDI events (hex + decoded)
+//   swift buzzer.swift send F0 7E 7F 06 01 F7   # send raw MIDI bytes (hex) to the buzzer
+//   swift buzzer.swift probe               # send LED candidates group by group (Enter = next group)
 //
-// ponytail: klassische (deprecated) CoreMIDI-Packet-API — funktioniert, ist die halbe Codemenge.
+// ponytail: classic (deprecated) CoreMIDI packet API — works fine and is half the code.
 
 import CoreMIDI
 import Foundation
@@ -50,7 +50,7 @@ func send(_ bytes: [UInt8]) {
     let packet = MIDIPacketListInit(&list)
     MIDIPacketListAdd(&list, 1024, packet, 0, bytes.count, bytes)
     MIDISend(port, dst, &list)
-    usleep(20_000) // Sende-Puffer leeren lassen, bevor der Prozess ggf. endet
+    usleep(20_000) // let the send buffer drain before the process may exit
 }
 
 func listen() {
@@ -73,28 +73,28 @@ func listen() {
 }
 
 func probe() {
-    // Das Gerät sendet selbst auf Kanal 12 (Status 0xBB) — LED hört vermutlich auch dort.
+    // The device itself talks on channel 12 (status 0xBB) — the LED most likely listens there too.
     let groups: [(String, [[UInt8]])] = [
         ("CC ch12 0-31 val=127",   (0..<32).map   { [0xBB, UInt8($0), 127] }),
         ("CC ch12 32-63 val=127",  (32..<64).map  { [0xBB, UInt8($0), 127] }),
         ("CC ch12 64-95 val=127",  (64..<96).map  { [0xBB, UInt8($0), 127] }),
         ("CC ch12 96-127 val=127", (96..<128).map { [0xBB, UInt8($0), 127] }),
         ("NoteOn ch12 0-127 vel=127", (0..<128).map { [0x9B, UInt8($0), 127] }),
-        ("SysEx Hersteller-Sweep F0 <id> 7F 7F 7F F7", (0..<0x7E).map { [0xF0, UInt8($0), 0x7F, 0x7F, 0x7F, 0xF7] }),
-        ("Alles aus ch12 (CC=0 + NoteOff)", (0..<128).flatMap { [[0xBB, UInt8($0), 0], [0x8B, UInt8($0), 0]] }),
+        ("SysEx manufacturer sweep F0 <id> 7F 7F 7F F7", (0..<0x7E).map { [0xF0, UInt8($0), 0x7F, 0x7F, 0x7F, 0xF7] }),
+        ("All off ch12 (CC=0 + NoteOff)", (0..<128).flatMap { [[0xBB, UInt8($0), 0], [0x8B, UInt8($0), 0]] }),
     ]
     for (label, msgs) in groups {
-        print("\n>> \(label) — \(msgs.count) Messages. Enter = senden, dann LED beobachten…")
+        print("\n>> \(label) — \(msgs.count) messages. Enter = send, then watch the LED…")
         _ = readLine()
         for m in msgs { send(m); usleep(5_000) }
-        print("   gesendet. Hat sich die LED verändert? (notieren, dann Enter für nächste Gruppe)")
+        print("   sent. Did the LED change? (take a note, then Enter for the next group)")
     }
 }
 
-// Steppt CC 0-127 auf Kanal 12 einzeln durch (je 0,7 s an, dann aus).
-// LED beobachten und notieren, welche CC-Nummer welche Farbe schaltet.
+// Steps through CCs on channel 12 one by one (on for dwellMs, then off).
+// Watch the LED and note which CC number switches which color.
 func scan(from: Int, to: Int, dwellMs: Int) {
-    print("Reset: alle CCs auf 0…")
+    print("Reset: all CCs to 0…")
     for cc in 0..<128 { send([0xBB, UInt8(cc), 0]) }
     sleep(1)
     for cc in from...to {
@@ -104,16 +104,16 @@ func scan(from: Int, to: Int, dwellMs: Int) {
         usleep(UInt32(dwellMs) * 1000)
         send([0xBB, UInt8(cc), 0])
     }
-    print("fertig — alle wieder auf 0.")
+    print("done — all back to 0.")
 }
 
-// 3 RGB-LEDs (links/mitte/rechts), je Kanal 0-127: CC 70-72, 73-75, 76-78 auf Kanal 12.
-// led r g b        → alle 3 LEDs gleich
-// led r g b × 3    → LEDs einzeln (links mitte rechts)
+// 3 RGB LEDs (left/middle/right), each channel 0-127: CC 70-72, 73-75, 76-78 on channel 12.
+// led r g b        → all 3 LEDs the same
+// led r g b × 3    → LEDs individually (left middle right)
 func led(_ v: [UInt8]) {
     let rgb = v.count == 3 ? v + v + v : v
     guard rgb.count == 9, rgb.allSatisfy({ $0 <= 127 }) else {
-        print("usage: led r g b  |  led r g b r g b r g b   (Werte 0-127)"); exit(1)
+        print("usage: led r g b  |  led r g b r g b r g b   (values 0-127)"); exit(1)
     }
     for (i, val) in rgb.enumerated() { send([0xBB, UInt8(70 + i), val]) }
 }
@@ -127,5 +127,5 @@ case "led":    led(args.dropFirst().compactMap { UInt8($0) })
 case "scan":
     let nums = args.dropFirst().compactMap { Int($0) }
     scan(from: nums.count > 0 ? nums[0] : 0, to: nums.count > 1 ? nums[1] : 127, dwellMs: nums.count > 2 ? nums[2] : 700)
-default: print("usage: swift buzzer.swift listen | send <hexbytes> | probe | scan [von] [bis] [ms] | led r g b")
+default: print("usage: swift buzzer.swift listen | send <hexbytes> | probe | scan [from] [to] [ms] | led r g b")
 }

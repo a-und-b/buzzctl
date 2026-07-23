@@ -1,7 +1,7 @@
-// buzzerd — Daemon für den timeBuzzer: mappt Rad/Taster auf Tastatur-Shortcuts
-// und Shell-Kommandos, mit App-Profilen (Frontmost-App → Profil) und LED-Feedback.
+// buzzerd — daemon for the timeBuzzer: maps wheel/button to keyboard shortcuts
+// and shell commands, with app profiles (frontmost app → profile) and LED feedback.
 //
-// usage: buzzerd [pfad/zu/buzzerd.json]   (Default: ./buzzerd.json)
+// usage: buzzerd [path/to/buzzerd.json]   (default: ./buzzerd.json)
 //        buzzerd selftest
 //
 // Build: swiftc -O buzzerd.swift -o buzzerd
@@ -22,9 +22,9 @@ struct Profile: Codable {
 
 func log(_ s: String) { print("\(ISO8601DateFormatter().string(from: Date()))  \(s)"); fflush(stdout) }
 
-// MARK: - Pure Logik
+// MARK: - Pure logic
 
-// Rad meldet absolute Position 0–127; bei Wrap (Endlos-Encoder) Vorzeichen korrigieren.
+// The wheel reports an absolute position 0–127; fix the sign when it wraps (endless encoder).
 func wheelDelta(last: Int, now: Int) -> Int {
     var d = now - last
     if d > 64 { d -= 128 }
@@ -32,8 +32,8 @@ func wheelDelta(last: Int, now: Int) -> Int {
     return d
 }
 
-// ponytail: US-physische Keycodes (ANSI). Auf QWERTZ sind z/y vertauscht —
-// layout-aware Mapping via UCKeyTranslate steht auf der Roadmap.
+// ponytail: US-physical key codes (ANSI). On QWERTZ, z/y are swapped —
+// layout-aware mapping via UCKeyTranslate is on the roadmap.
 let keyCodes: [String: CGKeyCode] = [
     "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9,
     "b": 11, "q": 12, "w": 13, "e": 14, "r": 15, "y": 16, "t": 17,
@@ -63,8 +63,8 @@ func parseCombo(_ combo: String) -> (CGEventFlags, CGKeyCode)? {
 
 if CommandLine.arguments.contains("selftest") {
     assert(wheelDelta(last: 50, now: 53) == 3)
-    assert(wheelDelta(last: 126, now: 2) == 4)    // Wrap aufwärts
-    assert(wheelDelta(last: 2, now: 126) == -4)   // Wrap abwärts
+    assert(wheelDelta(last: 126, now: 2) == 4)    // wrap upwards
+    assert(wheelDelta(last: 2, now: 126) == -4)   // wrap downwards
     let (f, c) = parseCombo("cmd+shift+m")!
     assert(c == 46 && f.contains(.maskCommand) && f.contains(.maskShift) && !f.contains(.maskControl))
     assert(parseCombo("cmd+ö") == nil)
@@ -86,9 +86,9 @@ func loadConfigIfChanged() {
     do {
         config = try JSONDecoder().decode([String: Profile].self,
                                           from: Data(contentsOf: URL(fileURLWithPath: configPath)))
-        log("config geladen (\(config.count) Profile): \(config.keys.sorted().joined(separator: ", "))")
+        log("config loaded (\(config.count) profiles): \(config.keys.sorted().joined(separator: ", "))")
         applyProfileLED(force: true)
-    } catch { log("config-Fehler in \(configPath): \(error)") }
+    } catch { log("config error in \(configPath): \(error)") }
 }
 
 func activeProfile() -> (key: String, profile: Profile?) {
@@ -126,7 +126,7 @@ func applyProfileLED(force: Bool = false) {
     lastLEDProfile = key
     guard var rgb = profile?.led else { return }
     if rgb.count == 3 { rgb = rgb + rgb + rgb }
-    guard rgb.count == 9 else { log("led braucht 3 oder 9 Werte"); return }
+    guard rgb.count == 9 else { log("led needs 3 or 9 values"); return }
     for (i, v) in rgb.enumerated() { midiSend([0xBB, UInt8(70 + i), min(v, 127)]) }
 }
 
@@ -138,10 +138,10 @@ func run(_ action: Action?, _ label: String) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
         p.arguments = ["-c", shell]
-        do { try p.run() } catch { log("shell-Fehler (\(label)): \(error)") }
+        do { try p.run() } catch { log("shell error (\(label)): \(error)") }
     }
     if let key = action.key {
-        guard let (flags, code) = parseCombo(key) else { log("unbekannte Taste: \(key)"); return }
+        guard let (flags, code) = parseCombo(key) else { log("unknown key: \(key)"); return }
         let src = CGEventSource(stateID: .hidSystemState)
         for down in [true, false] {
             let e = CGEvent(keyboardEventSource: src, virtualKey: code, keyDown: down)
@@ -167,7 +167,7 @@ func handle(cc: UInt8, val: UInt8) {
         if d > 0 { run(profile?.wheelUp, "wheelUp") }
         if d < 0 { run(profile?.wheelDown, "wheelDown") }
     case 81:
-        // Touch-Sensor, aktiv-niedrig; Status wird periodisch wiederholt → nur auf Wechsel reagieren
+        // Touch sensor, active-low; state is repeated periodically → only react to changes
         let touched = val < 64
         defer { lastTouched = touched }
         guard let last = lastTouched, touched != last else { return }
@@ -188,19 +188,19 @@ func connectBuzzer() {
         connectedSource = source
         lastWheel = nil
         lastTouched = nil
-        log("timeBuzzer verbunden")
+        log("timeBuzzer connected")
         applyProfileLED(force: true)
     }
     if source == 0, connectedSource != 0 {
         connectedSource = 0
-        log("timeBuzzer getrennt")
+        log("timeBuzzer disconnected")
     }
 }
 
 // MARK: - Start
 
 MIDIClientCreateWithBlock("buzzerd" as CFString, &client) { _ in
-    DispatchQueue.main.async { connectBuzzer() } // Hot-Plug: bei jeder Setup-Änderung neu suchen
+    DispatchQueue.main.async { connectBuzzer() } // hot-plug: re-scan on every setup change
 }
 MIDIOutputPortCreate(client, "out" as CFString, &outPort)
 MIDIInputPortCreateWithBlock(client, "in" as CFString, &inPort) { packetList, _ in
@@ -223,5 +223,5 @@ NSWorkspace.shared.notificationCenter.addObserver(
 
 Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in loadConfigIfChanged() }
 
-log("buzzerd läuft — config: \(configPath)")
+log("buzzerd running — config: \(configPath)")
 RunLoop.main.run()
