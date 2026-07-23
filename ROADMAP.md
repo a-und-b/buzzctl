@@ -1,26 +1,26 @@
 # Roadmap
 
-Die Basis ist bewusst minimal: ein Event pro Bedienelement, Profile per
-Frontmost-App, Aktionen als Shell-Kommando oder Tastatur-Shortcut.
-Nachrüstbar, grob nach Nutzen sortiert:
+The base is deliberately minimal: one event per control, profiles keyed by
+frontmost app, actions as shell commands or keyboard shortcuts.
+Candidates for later, roughly sorted by usefulness:
 
-## Bedienung
-- **Gesten:** Doppelklick, Langdruck (Timer zwischen press/release), Drücken+Drehen als eigene Events
-- **Rad als Modus-Wähler:** Drehen wählt Aktion/Profil (LED-Farbe als Feedback), Drücken führt aus
-- **Wheel-Tuning:** Schrittweite/Beschleunigung konfigurierbar, Aktion erst pro N Schritte
+## Input
+- **Gestures:** double-click, long-press (timer between press/release), press+turn as separate events
+- **Wheel as mode selector:** turning selects an action/profile (LED color as feedback), pressing executes
+- **Wheel tuning:** configurable step size/acceleration, trigger action every N steps
 
-## Aktionen
-- **Media-Keys** nativ (Lautstärke, Play/Pause via `NX_KEYTYPE_*` statt osascript-Umweg)
-- **Layout-aware Keycodes:** aktuell US-physisch (auf QWERTZ sind z/y vertauscht) → Mapping via `UCKeyTranslate`
-- **Aktions-Sequenzen** (mehrere Aktionen pro Event) und Inline-Variablen (z. B. Radposition an Shell übergeben)
+## Actions
+- **Native media keys** (volume, play/pause via `NX_KEYTYPE_*` instead of the osascript detour)
+- **Layout-aware key codes:** currently US-physical (z/y swapped on QWERTZ) → map via `UCKeyTranslate`
+- **Action sequences** (multiple actions per event) and inline variables (e.g. pass the wheel position to the shell)
 
 ## LED
-- **Animationen:** Pulsieren, Blinken, Lauflicht — z. B. als Timer- oder Statusanzeige
-- **Aufräumen beim Beenden:** Signal-Handler, der die LEDs ausschaltet bzw. Zustand wiederherstellt
+- **Animations:** pulse, blink, chase — e.g. as a timer or status display
+- **Cleanup on exit:** signal handler that turns the LEDs off or restores their previous state
 
-## Infrastruktur
-- **Menubar-UI:** aktives Profil anzeigen, Config öffnen, Daemon pausieren
-- **Mehrere Buzzer** gleichzeitig (Unterscheidung über Seriennummer / `kMIDIPropertyUniqueID`)
-- **Homebrew-Formula** + signiertes Release-Binary
-- **Linux/Windows-Port:** Protokoll ist dokumentiert (README); ALSA rawmidi bzw. WinMM genügen
-- **Config-Schema-Validierung** mit hilfreichen Fehlermeldungen
+## Infrastructure
+- **Menu bar UI:** show the active profile, open the config, pause the daemon
+- **Multiple buzzers** at once (distinguished by serial number / `kMIDIPropertyUniqueID`)
+- **Homebrew formula** + signed release binary
+- **Linux/Windows port:** the protocol is documented (README); ALSA rawmidi or WinMM is all it takes
+- **Config schema validation** with helpful error messages

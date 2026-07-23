@@ -1,12 +1,13 @@
 # buzzctl
 
-Die timeBuzzer®-Hardware ohne Hersteller-Software nutzen: dokumentiertes
-MIDI-Protokoll, Debug-Tool und `buzzerd` — ein macOS-Daemon, der Rad/Taster
-auf Shortcuts und Shell-Kommandos mappt, mit App-Profilen und LED-Feedback.
+Use the timeBuzzer® hardware without the vendor software: documented MIDI
+protocol, a debug tool, and `buzzerd` — a macOS daemon that maps the wheel
+and button to keyboard shortcuts and shell commands, with per-app profiles
+and LED feedback.
 
-> Dieses Projekt steht in keiner Verbindung zur Ideas in Logic GbR.
-> timeBuzzer® ist eine eingetragene Marke des jeweiligen Inhabers; der Name
-> wird hier nur zur Beschreibung der Gerätekompatibilität verwendet.
+> This project is not affiliated with Ideas in Logic GbR. timeBuzzer® is a
+> registered trademark of its respective owner; the name is used here solely
+> to describe device compatibility.
 
 ## buzzerd
 
@@ -15,61 +16,62 @@ swiftc -O buzzerd.swift -o buzzerd
 ./buzzerd buzzerd.json
 ```
 
-- **Profile:** `buzzerd.json` mappt Bundle-IDs (Frontmost-App) auf Profile,
-  `default` als Fallback. Änderungen werden im Betrieb übernommen (mtime-Poll).
+- **Profiles:** `buzzerd.json` maps bundle IDs (frontmost app) to profiles,
+  with `default` as fallback. Changes are picked up at runtime (mtime poll).
 - **Events:** `press`, `release`, `wheelUp`, `wheelDown`, `touch`, `untouch`
-  (Buzzer anfassen ohne zu drücken).
-- **Aktionen:** `{"shell": "…"}` (auch `shortcuts run "Name"` für die
-  Shortcuts-App, keine Sonderrechte nötig) oder `{"key": "cmd+shift+m"}`
-  (braucht einmalig Bedienungshilfen-Berechtigung für das Binary).
-- **LED:** `"led": [r,g,b]` (alle 3 LEDs) oder 9 Werte einzeln, 0–127 —
-  zeigt das aktive Profil an.
-- **Hot-Plug:** Buzzer ab-/anstecken wird erkannt.
-- **Autostart:** in `buzzerd.plist` die beiden `/PATH/TO`-Einträge anpassen,
-  dann `cp buzzerd.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/buzzerd.plist`.
-- **Selbsttest:** `./buzzerd selftest`
+  (resting a hand on the buzzer without pressing).
+- **Actions:** `{"shell": "…"}` (including `shortcuts run "Name"` for the
+  macOS Shortcuts app, no special permissions needed) or
+  `{"key": "cmd+shift+m"}` (requires a one-time Accessibility grant for the
+  binary).
+- **LED:** `"led": [r,g,b]` (all 3 LEDs) or 9 values for individual control,
+  0–127 — shows which profile is active.
+- **Hot-plug:** unplugging/replugging the buzzer is detected.
+- **Autostart:** edit the two `/PATH/TO` entries in `buzzerd.plist`, then
+  `cp buzzerd.plist ~/Library/LaunchAgents/ && launchctl load ~/Library/LaunchAgents/buzzerd.plist`.
+- **Self-check:** `./buzzerd selftest`
 
-Geplante Erweiterungen: siehe [ROADMAP.md](ROADMAP.md).
+Planned features: see [ROADMAP.md](ROADMAP.md).
 
-## Erkenntnisse (Stand 2026-07-23)
+## Findings (as of 2026-07-23)
 
-- Das Gerät ist **kein HID**, sondern ein **USB-MIDI-Gerät** (USB `16D0:1170`,
-  Audio-Class mit MIDI-Streaming-Interface). macOS bindet es automatisch an den
-  MIDIServer — es erscheint als MIDI-Source **und** -Destination namens „timeBuzzer".
-- **Protokoll (vollständig entschlüsselt):** alles Control Change auf Kanal 12 (Status `0xBB`):
+- The device is **not HID** but a **USB MIDI device** (USB `16D0:1170`,
+  audio class with a MIDI streaming interface). macOS binds it to the
+  MIDIServer automatically — it shows up as a MIDI source **and**
+  destination named "timeBuzzer". No driver required.
+- **Protocol (fully decoded):** everything is Control Change on MIDI
+  channel 12 (status byte `0xBB`):
 
-  | CC | Richtung | Bedeutung |
-  |----|----------|-----------|
-  | 70–72 | → Gerät | LED links: R, G, B (0–127) |
-  | 73–75 | → Gerät | LED mitte: R, G, B |
-  | 76–78 | → Gerät | LED rechts: R, G, B |
-  | 80 | ← Gerät | Rad, absolute Position 0–127 (wrappt) |
-  | 81 | ← Gerät | Touch-Sensor, aktiv-niedrig: < 64 = berührt; Status wird alle ~1,5 s wiederholt (sieht wie ein Heartbeat aus) |
-  | 82 | ← Gerät | Taster: 127 = gedrückt, 0 = losgelassen |
-- Keine Antwort auf Standard-SysEx Identity Request (`F0 7E 7F 06 01 F7`).
-- Echo des Heartbeats zurück ans Gerät ändert (im MIDI-Log sichtbar) nichts.
-- Kein existierendes OSS-Projekt für diese Hardware gefunden (GitHub-Treffer
-  namens „TimeBuzzer" sind unabhängige Software-Zeittracker).
+  | CC | Direction | Meaning |
+  |----|-----------|---------|
+  | 70–72 | → device | Left LED: R, G, B (0–127) |
+  | 73–75 | → device | Middle LED: R, G, B |
+  | 76–78 | → device | Right LED: R, G, B |
+  | 80 | ← device | Wheel, absolute position 0–127 (wraps) |
+  | 81 | ← device | Touch sensor, active-low: < 64 = touched; state is repeated every ~1.5 s (looks like a heartbeat) |
+  | 82 | ← device | Button: 127 = pressed, 0 = released |
 
-## Tool
+- No response to the standard SysEx identity request (`F0 7E 7F 06 01 F7`).
 
-`buzzer.swift` — null Dependencies, direkt ausführbar:
+## Tools
 
 ```
-swift buzzer.swift listen                    # eingehende Events dumpen (hex + dekodiert)
-swift buzzer.swift led 127 0 0               # alle 3 LEDs rot
-swift buzzer.swift led 127 0 0 0 127 0 0 0 127   # links rot, mitte grün, rechts blau
-swift buzzer.swift send BB 46 7F             # rohe MIDI-Bytes senden
-swift buzzer.swift scan [von] [bis] [ms]     # CCs einzeln durchsteppen
+swift buzzer.swift listen                    # dump incoming events (hex + decoded)
+swift buzzer.swift led 127 0 0               # all 3 LEDs red
+swift buzzer.swift led 127 0 0 0 127 0 0 0 127   # left red, middle green, right blue
+swift buzzer.swift send BB 46 7F             # send raw MIDI bytes
+swift buzzer.swift scan [from] [to] [ms]     # step through CCs one by one
 ```
 
-`led-ui.html` — Browser-UI (Web MIDI, in Chrome öffnen) mit Buttons für die LED-CCs.
+`led-ui.html` — browser UI (Web MIDI, open in Chrome) with buttons for the
+LED CCs.
 
-Da das Gerät ein Standard-MIDI-Gerät ist, funktioniert jede MIDI-Lib direkt:
-Python (`mido`), Node (`easymidi`), Browser (Web MIDI API) — kein Treiber nötig.
+Since this is a standard MIDI device, any MIDI library works out of the box:
+Python (`mido`), Node (`easymidi`), the browser (Web MIDI API) — no driver
+needed.
 
-## Verwandte Projekte
+## Related projects
 
 - [vertexitde/OpenBuzzer](https://github.com/vertexitde/OpenBuzzer) —
-  Electron-App für LED-Animationen (Pomodoro, Media-Keys, Plugin-System),
-  nutzt dasselbe MIDI-Protokoll.
+  Electron app for LED animations (Pomodoro, media keys, plugin system),
+  uses the same MIDI protocol.
