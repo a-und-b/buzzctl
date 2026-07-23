@@ -16,6 +16,8 @@ struct Profile: Codable {
     var release: Action?
     var wheelUp: Action?
     var wheelDown: Action?
+    var touch: Action?
+    var untouch: Action?
 }
 
 func log(_ s: String) { print("\(ISO8601DateFormatter().string(from: Date()))  \(s)"); fflush(stdout) }
@@ -152,6 +154,7 @@ func run(_ action: Action?, _ label: String) {
 // MARK: - Events
 
 var lastWheel: Int?
+var lastTouched: Bool?
 
 func handle(cc: UInt8, val: UInt8) {
     let profile = activeProfile().profile
@@ -163,9 +166,15 @@ func handle(cc: UInt8, val: UInt8) {
         let d = wheelDelta(last: last, now: now)
         if d > 0 { run(profile?.wheelUp, "wheelUp") }
         if d < 0 { run(profile?.wheelDown, "wheelDown") }
+    case 81:
+        // Touch-Sensor, aktiv-niedrig; Status wird periodisch wiederholt → nur auf Wechsel reagieren
+        let touched = val < 64
+        defer { lastTouched = touched }
+        guard let last = lastTouched, touched != last else { return }
+        run(touched ? profile?.touch : profile?.untouch, touched ? "touch" : "untouch")
     case 82:
         run(val == 127 ? profile?.press : profile?.release, val == 127 ? "press" : "release")
-    default: break // 81 = Heartbeat
+    default: break
     }
 }
 
@@ -178,6 +187,7 @@ func connectBuzzer() {
         MIDIPortConnectSource(inPort, source, nil)
         connectedSource = source
         lastWheel = nil
+        lastTouched = nil
         log("timeBuzzer verbunden")
         applyProfileLED(force: true)
     }

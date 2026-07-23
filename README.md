@@ -17,7 +17,8 @@ swiftc -O buzzerd.swift -o buzzerd
 
 - **Profile:** `buzzerd.json` mappt Bundle-IDs (Frontmost-App) auf Profile,
   `default` als Fallback. Änderungen werden im Betrieb übernommen (mtime-Poll).
-- **Events:** `press`, `release`, `wheelUp`, `wheelDown`.
+- **Events:** `press`, `release`, `wheelUp`, `wheelDown`, `touch`, `untouch`
+  (Buzzer anfassen ohne zu drücken).
 - **Aktionen:** `{"shell": "…"}` (auch `shortcuts run "Name"` für die
   Shortcuts-App, keine Sonderrechte nötig) oder `{"key": "cmd+shift+m"}`
   (braucht einmalig Bedienungshilfen-Berechtigung für das Binary).

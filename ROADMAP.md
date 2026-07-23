@@ -5,7 +5,6 @@ Frontmost-App, Aktionen als Shell-Kommando oder Tastatur-Shortcut.
 Nachrüstbar, grob nach Nutzen sortiert:
 
 ## Bedienung
-- **Touch-Events:** CC 81 ist ein Touch-Sensor (aktiv-niedrig, < 64 = berührt) — als `touch`/`untouch`-Events in buzzerd anbieten (Erkenntnis aus vertexitde/OpenBuzzer, am Gerät noch zu verifizieren)
 - **Gesten:** Doppelklick, Langdruck (Timer zwischen press/release), Drücken+Drehen als eigene Events
 - **Rad als Modus-Wähler:** Drehen wählt Aktion/Profil (LED-Farbe als Feedback), Drücken führt aus
 - **Wheel-Tuning:** Schrittweite/Beschleunigung konfigurierbar, Aktion erst pro N Schritte
