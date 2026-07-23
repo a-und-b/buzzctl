@@ -378,7 +378,8 @@ struct ShellField: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            TextField("Command", text: $text)
+            TextField("", text: $text, prompt: Text("Command"))
+                .labelsHidden()
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.callout, design: .monospaced))
                 .frame(width: 280)
