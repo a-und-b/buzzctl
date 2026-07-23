@@ -77,6 +77,10 @@ needed.
   Electron app for LED animations (Pomodoro, media keys, plugin system),
   uses the same MIDI protocol.
 
+## License
+
+[MIT](LICENSE)
+
 ## Acknowledgements
 
 - [Ideas in Logic GbR](https://timebuzzer.com/) — makers of the timeBuzzer®
