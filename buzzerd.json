@@ -19,6 +19,12 @@
     "wheelUp": { "key": "cmd+up" },
     "wheelDown": { "key": "cmd+down" }
   },
+  "com.apple.QuickTimePlayerX": {
+    "led": [0, 127, 127],
+    "press": { "key": "space" },
+    "wheelUp": { "key": "right" },
+    "wheelDown": { "key": "left" }
+  },
   "com.adobe.PremierePro.26": {
     "led": [80, 0, 127],
     "press": { "key": "space" },
