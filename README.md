@@ -178,14 +178,80 @@ Since this is a standard MIDI device, any MIDI library works out of the box:
 Python (`mido`), Node (`easymidi`), the browser (Web MIDI API) — no driver
 needed.
 
+## Development
+
+```
+Engine.swift      shared engine: MIDI, profiles, gestures, actions, LED
+buzzerd.swift     CLI entry point + selftest
+BuzzctlApp.swift  SwiftUI menu bar app and settings window
+buzzer.swift      standalone protocol debug tool (no build step)
+build.sh          builds ./buzzerd and ./Buzzctl.app, runs the selftest
+```
+
+`./build.sh` compiles both targets and runs `./buzzerd selftest`, which
+covers the pure logic (wheel wrap-around, key combo parsing, and the
+gesture state machine with shortened timers). Keep it green — it is the
+only test.
+
+### Debugging
+
+```bash
+./buzzerd -v buzzerd.json      # log every raw MIDI event and fired action
+swift buzzer.swift listen      # raw protocol dump, no config involved
+```
+
+Only run one of them at a time, and quit `Buzzctl.app` while using the
+CLI: every running instance reacts to the same device, so two of them
+execute every action twice — with different configs, which looks like the
+app ignoring its own settings.
+
+### Accessibility and code signing
+
+Key actions (including media keys) are silently dropped by macOS unless
+the binary has Accessibility access, and that grant is tied to the code
+signature. Without a signing identity, `build.sh` falls back to an ad-hoc
+signature, which **changes on every rebuild** — so macOS treats each build
+as a new app and the previous grant no longer applies. Symptom: keystrokes
+stop working after a rebuild while shell actions keep running, and stale
+Buzzctl entries pile up in the Accessibility list.
+
+Clear those entries and re-grant once:
+
+```bash
+tccutil reset Accessibility com.github.a-und-b.buzzctl
+```
+
+Then use the menu bar item "⚠️ Grant Accessibility Access…", which opens
+the right settings pane. To stop this from recurring, create a
+**self-signed Code Signing certificate** in Keychain Access (Certificate
+Assistant → Create a Certificate → type "Code Signing"). `build.sh` picks
+up the first identity it finds, keeping the signature — and the grant —
+stable across rebuilds.
+
+Note that the app prompts for the permission only on first launch;
+afterwards a missing grant surfaces as a menu bar item rather than a
+dialog.
+
+### Releasing
+
+Bump the version in `Info.plist`, then:
+
+```bash
+./build.sh && ditto -c -k --keepParent Buzzctl.app Buzzctl-<version>-arm64.zip
+gh release create v<version> Buzzctl-<version>-arm64.zip --title "Buzzctl <version>"
+```
+
+Releases are ad-hoc signed and Apple Silicon only; Developer ID signing,
+notarization and a universal binary are on the [roadmap](ROADMAP.md).
+
 ## Acknowledgements
 
 - [Ideas in Logic GbR](https://timebuzzer.com/) — makers of the timeBuzzer®
   hardware this project builds on. If you like the device, buy one from them.
 - [vertexitde/OpenBuzzer](https://github.com/vertexitde/OpenBuzzer) — Electron
   app for LED animations (Pomodoro, media keys, plugin system) using the same
-  MIDI protocol; also provided the hint that CC 81 is a touch sensor, not a
-  heartbeat.
+  MIDI protocol; also provided the hint that CC 81 is a sensor reading
+  rather than a heartbeat.
 
 ## License
 
